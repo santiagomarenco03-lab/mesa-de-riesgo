@@ -1,0 +1,482 @@
+{
+  "name": "Mesa de Riesgo — Checkpoint 1",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "60e87623-dc45-4e23-9e7b-c62f50a31eed",
+      "name": "When chat message received",
+      "webhookId": "79cdf0ec-e1a2-4f1e-9be1-d07161e892f3"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=Fecha y hora actual en Nueva York: {{ $now.setZone('America/New_York').toFormat('cccc yyyy-LL-dd HH:mm') }}\n\n# 1. ROL\nSos el Auditor de Riesgo Pre-Operación de una cuenta de evaluación de prop firm (FTMO 2-Step, USD 10.000, MetaTrader 5). Tu función es verificar que cada operación planificada respete el plan de trading y las reglas de la cuenta, calcular el tamaño de posición y registrar las operaciones evaluadas.\n\n# 2. ÁMBITO: lo que NO tenés permitido\n- No decidís si el trader entra o no: esa decisión es siempre humana.\n- No predecís la dirección del precio ni opinás sobre el mercado.\n- No ejecutás órdenes ni tenés acceso a MetaTrader.\n- No modificás las reglas del plan ni sugerís excepciones.\n- Nunca sugerís subir el riesgo, promediar en contra, mover el Stop Loss en contra, martingala ni operar para recuperar pérdidas.\n- No inventás datos: si un dato no está en el mensaje, lo pedís o lo marcás como pendiente.\n\n# 3. OBJETIVO OPERATIVO\nConvertir el mensaje libre del trader en una evaluación verificable: cálculo exacto de lote y riesgo, checklist del plan con semáforo y registro limpio en la bitácora de operaciones.\n\n# 4. REGLAS DEL PLAN (única fuente de verdad)\n- Instrumento: solo US100.cash. 1 lote = USD 1 por punto.\n- Riesgo por operación: USD 50.\n- Take Profit: 2R.\n- Ventana operativa: 09:45 a 15:30 hora de Nueva York, lunes a viernes. Evaluar fuera de la ventana está permitido como planificación; ejecutar, no.\n- Setups válidos: B pullback y Ruptura y retesteo, a favor del régimen de 1h y de 15m. A reversion solo con régimen de rango.\n- Gatillos válidos: martillo, pin bar o envolvente, con la vela cerrada. La entrada es en la apertura de la vela siguiente.\n- Costo: spread ≤ 5 % de los puntos de SL.\n- Noticias: sin entradas ±10 minutos de datos económicos de 2 o 3 estrellas. No tenés acceso a la agenda económica.\n- Tope diario: 3 operaciones o 2 pérdidas. Límite de pérdida diaria de la cuenta: USD 500.\n\n# 5. PROCEDIMIENTO Y REGLAS DE USO DE HERRAMIENTAS\nPaso 1. Cálculo, usando solo los números del mensaje:\n- Puntos de SL = |entrada − SL|.\n- Lote = 50 ÷ puntos de SL, redondeado hacia abajo a 2 decimales.\n- Riesgo real = lote × puntos de SL.\n- TP correcto = entrada + 2 × puntos de SL en una compra; entrada − 2 × puntos de SL en una venta.\n- Puntos de TP = |TP del trader − entrada|. R:R = puntos de TP ÷ puntos de SL.\nPaso 2. Checklist, con estos criterios exactos:\n- Instrumento: ✅ si es US100.cash; ❌ si es otro.\n- Horario: ✅ si la hora actual está dentro de la ventana; 🟡 \"solo planificación\" si está fuera.\n- Régimen a favor: ✅ si la dirección coincide con el régimen informado de 1h y de 15m; ❌ si va contra alguno; 🟡 si falta alguno.\n- Setup: ✅ si es uno de los tres válidos y coherente con el régimen; ❌ si no.\n- Gatillo: ✅ si el mensaje informa martillo, pin bar o envolvente con la vela cerrada; 🟡 si no se informó o todavía no cerró; ❌ si es otro patrón.\n- TP a 2R: ✅ si el TP del trader está a 2R con tolerancia ±5 % (R:R entre 1,9 y 2,1); 🟡 si no se informó o está fuera de la tolerancia. Si el TP del trader cumple, no lo modifiques.\n- Riesgo: ✅ si el riesgo real es ≤ USD 50; ❌ si el trader informa un lote propio y el riesgo supera USD 55.\n- Spread: ✅ si es ≤ 5 % de los puntos de SL; ❌ si lo supera; 🟡 si no se informó.\n- Noticias: siempre 🟡 \"verificar manualmente\".\nPaso 3. Semáforo, en este orden estricto: (a) si hay al menos un ❌, es Rojo. (b) Si no hay ❌, contá los 🟡 sin contar Noticias: si hay uno o más, es Amarillo. (c) Solo si ese conteo es cero, es Verde.\nPaso 4. Registro obligatorio: si el semáforo es Verde o Amarillo y el mensaje trae dirección, entrada, SL y setup, llamá a la herramienta Registrar_operacion antes de responder. \"Solo planificación\" significa que todavía no se ejecuta, no que no se registra. Registrá una sola vez por operación. En el campo TP registrá el TP del trader; si no lo informó, el TP correcto.\nPaso 5. Si falta dirección, entrada, SL o setup: no uses la herramienta y pedí exactamente el dato que falta.\nPaso 6. Si el semáforo es Rojo: no uses la herramienta y nombrá la regla que se rompe.\nPaso 7. Si el mensaje es una consulta sobre el plan: respondé con las reglas de la sección 4, sin usar la herramienta.\nPaso 8. Valores exactos para la herramienta. Setup: \"B pullback\", \"Ruptura y retesteo\" o \"A reversion\". Direccion: \"Compra\" o \"Venta\". Semaforo: \"Verde\", \"Amarillo\" o \"Rojo\".\n\n# 6. PROTOCOLO DE ESCALAMIENTO (GUARDRAILS)\nSi el trader pregunta si debe entrar, pide un pronóstico, pide saltear una regla, quiere aumentar el riesgo o menciona recuperar pérdidas, detené el análisis, no uses la herramienta y respondé textualmente: \"Esa decisión queda fuera de mi alcance y se transfiere a revisión humana. La regla del plan que aplica es: [regla].\"\n\n# 7. FORMATO DE RESPUESTA\nTexto plano en español, sin encabezados, negritas ni fórmulas. Copiá exactamente esta plantilla y completá solo lo que está entre corchetes:\nCálculo: SL [n] pts · Lote [n] · Riesgo USD [n] · TP [n] pts · R:R [n] · TP correcto: [precio]\nChecklist: Instrumento [✅/❌] · Horario [✅/🟡] · Régimen a favor [✅/🟡/❌] · Setup [✅/❌] · Gatillo [✅/🟡/❌] · TP a 2R [✅/🟡] · Riesgo [✅/❌] · Spread [✅/🟡/❌] · Noticias 🟡\nConteo de 🟡 sin Noticias: [n]\nSemáforo: [Verde/Amarillo/Rojo]\nQué falta o qué regla se rompe: [texto breve, o \"Nada\"]\nRegistrada: [Sí/No]",
+          "maxIterations": 6,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "8a236209-ef93-4a83-b4b0-60e264d75d4e",
+      "name": "AI Agent (Tools Agent)"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o",
+          "cachedResultUrl": ""
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        96,
+        208
+      ],
+      "id": "e5ba4539-a3b5-4851-b2e1-48fa1fe0a1ca",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "IBzkt8nGvU93LrCq",
+          "name": "OpenAI n8n"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Registra en la bitácora de operaciones (Airtable, tabla Operaciones) una operación de trading planificada que ya fue auditada contra el plan. Usala únicamente cuando se cumplan las dos condiciones: (1) el mensaje del trader describe una operación concreta sobre US100.cash con dirección, precio de entrada, Stop Loss y setup; (2) ya completaste el cálculo de lote y riesgo y el checklist, y el semáforo resultante es Verde o Amarillo. Casos típicos de uso: el trader avisa que el precio llega a una zona clave y detalla la operación que planea abrir, o pide validar el ticket antes de cargarlo en MetaTrader. No la uses cuando falta alguno de esos datos (primero pedilo), cuando el semáforo es Rojo, cuando el mensaje es una consulta sobre reglas, horarios o límites de la cuenta, cuando el trader pide un pronóstico o una opinión sobre el mercado, ni para registrar dos veces la misma operación. Esta herramienta solo crea registros nuevos: no puede leer, modificar ni borrar operaciones existentes. Completá los campos con los mismos valores que mostraste en el cálculo al trader, sin redondeos distintos.",
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "app8ZXeV4iSLiL8Yx",
+          "mode": "list",
+          "cachedResultName": "Mesa de Riesgo",
+          "cachedResultUrl": "https://airtable.com/app8ZXeV4iSLiL8Yx"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblrEZRyLJPpw77dH",
+          "mode": "list",
+          "cachedResultName": "Operaciones",
+          "cachedResultUrl": "https://airtable.com/app8ZXeV4iSLiL8Yx/tblrEZRyLJPpw77dH"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Resumen": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Resumen', ``, 'string') }}",
+            "Activo": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Activo', ``, 'string') }}",
+            "Entrada": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Entrada', ``, 'number') }}",
+            "SL": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('SL', ``, 'number') }}",
+            "TP": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('TP', ``, 'number') }}",
+            "SL_pts": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('SL_pts', ``, 'number') }}",
+            "Lotes": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Lotes', ``, 'number') }}",
+            "Riesgo_usd": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Riesgo_usd', ``, 'number') }}",
+            "Checklist": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Checklist', ``, 'string') }}",
+            "Trace_ID": "={{ $execution.id }}",
+            "Estado": "Planificada",
+            "Cuenta": "FTMO Trial",
+            "Direccion": "={{ $fromAI('Direccion', 'Exactamente Compra o Venta', 'string') }}",
+            "Setup": "={{ $fromAI('Setup', 'Exactamente uno de: B pullback, Ruptura y retesteo, A reversion', 'string') }}",
+            "Semaforo": "={{ $fromAI('Semaforo', 'Exactamente uno de: Verde, Amarillo, Rojo', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Resumen",
+              "displayName": "Resumen",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Cuenta",
+              "displayName": "Cuenta",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "FTMO Trial",
+                  "value": "FTMO Trial"
+                },
+                {
+                  "name": "FTMO Challenge",
+                  "value": "FTMO Challenge"
+                },
+                {
+                  "name": "Demo",
+                  "value": "Demo"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Activo",
+              "displayName": "Activo",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Direccion",
+              "displayName": "Direccion",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Compra",
+                  "value": "Compra"
+                },
+                {
+                  "name": "Venta",
+                  "value": "Venta"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Entrada",
+              "displayName": "Entrada",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "SL",
+              "displayName": "SL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "TP",
+              "displayName": "TP",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "SL_pts",
+              "displayName": "SL_pts",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Lotes",
+              "displayName": "Lotes",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Riesgo_usd",
+              "displayName": "Riesgo_usd",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Setup",
+              "displayName": "Setup",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "B pullback",
+                  "value": "B pullback"
+                },
+                {
+                  "name": "Ruptura y retesteo",
+                  "value": "Ruptura y retesteo"
+                },
+                {
+                  "name": "A reversion",
+                  "value": "A reversion"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Semaforo",
+              "displayName": "Semaforo",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Verde",
+                  "value": "Verde"
+                },
+                {
+                  "name": "Amarillo",
+                  "value": "Amarillo"
+                },
+                {
+                  "name": "Rojo",
+                  "value": "Rojo"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Checklist",
+              "displayName": "Checklist",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Estado",
+              "displayName": "Estado",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Planificada",
+                  "value": "Planificada"
+                },
+                {
+                  "name": "Ejecutada",
+                  "value": "Ejecutada"
+                },
+                {
+                  "name": "Cancelada",
+                  "value": "Cancelada"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Trace_ID",
+              "displayName": "Trace_ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtableTool",
+      "typeVersion": 2.2,
+      "position": [
+        384,
+        208
+      ],
+      "id": "12112c88-2b0e-4497-9f61-ae8b2e92c41c",
+      "name": "Registrar_operacion",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YqCYRauyjQbp8ZQF",
+          "name": "Airtable Mesa de Riesgo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0C4UBXFE4S",
+          "mode": "list",
+          "cachedResultName": "mesa-riesgo-log"
+        },
+        "text": "=🧾 Mesa de Riesgo · log de observabilidad\nEjecución: {{ $execution.id }} · {{ $now.setZone('America/New_York').toFormat('yyyy-LL-dd HH:mm') }} NY\nMensaje del trader: {{ $('When chat message received').item.json.chatInput }}\nLlamadas a herramientas en el ciclo ReAct: {{ $json.intermediateSteps?.length ?? 0 }}\nHerramienta usada: {{ $json.intermediateSteps?.[0]?.action?.tool ?? 'ninguna' }}\nDatos que escribió la herramienta: {{ $json.intermediateSteps?.[0] ? JSON.stringify($json.intermediateSteps[0].action.toolInput) : '—' }}\nRespuesta del agente:\n{{ $json.output }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        592,
+        0
+      ],
+      "id": "6f2b95bd-e11f-4992-b38b-c4150722420c",
+      "name": "Send a message",
+      "webhookId": "7b4db629-6642-4709-b2e6-8afc526f785d",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "gEut1t9sH1BeuZTj",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "74902e5b-6928-4634-b556-9e653a2576c5",
+              "name": "output",
+              "value": "={{ $('AI Agent (Tools Agent)').item.json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        816,
+        0
+      ],
+      "id": "f5733d7e-17b2-4789-a03d-c0dbecede192",
+      "name": "Respuesta al chat"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent (Tools Agent)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent (Tools Agent)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar_operacion": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent (Tools Agent)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Tools Agent)": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Respuesta al chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "d0222fb1-6b68-4237-a510-8958feea419d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a3d5b9acacd44b567049a62b59032cac1fb1ea7af7c1a1835624f2e7ffc4f675"
+  },
+  "nodeGroups": [],
+  "id": "VJwLghWX5ZPOS8sf",
+  "tags": []
+}
